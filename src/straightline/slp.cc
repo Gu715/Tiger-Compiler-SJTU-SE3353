@@ -1,7 +1,6 @@
 #include "straightline/slp.h"
 
 #include <iostream>
-#include "slp.h"
 
 namespace A {
 int A::CompoundStm::MaxArgs() const {
