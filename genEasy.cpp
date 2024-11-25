@@ -31,6 +31,32 @@ void buildMain(std::shared_ptr<llvm::Module> ir_module)
     builder.SetInsertPoint(entry);
 
     // TODO
+    llvm::AllocaInst *a = builder.CreateAlloca(llvm::Type::getInt32Ty(ir_module->getContext()), nullptr);
+    llvm::AllocaInst *b = builder.CreateAlloca(llvm::Type::getInt32Ty(ir_module->getContext()), nullptr);
+
+    builder.CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 1), a);
+    builder.CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 2), b);
+
+    llvm::LoadInst *a_val = builder.CreateLoad(llvm::Type::getInt32Ty(ir_module->getContext()), a);
+    llvm::LoadInst *b_val = builder.CreateLoad(llvm::Type::getInt32Ty(ir_module->getContext()), b);
+
+    llvm::Value *cond = builder.CreateICmpSLT(a_val, b_val);
+    
+    llvm::BasicBlock *then_block = llvm::BasicBlock::Create(ir_module->getContext(), "", main);
+    llvm::BasicBlock *merge_block = llvm::BasicBlock::Create(ir_module->getContext(), "", main);
+
+    builder.CreateCondBr(cond, then_block, merge_block);
+
+    builder.SetInsertPoint(then_block);
+    builder.CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 3), b);
+    builder.CreateBr(merge_block);
+
+    builder.SetInsertPoint(merge_block);
+    llvm::LoadInst *a_new_val = builder.CreateLoad(llvm::Type::getInt32Ty(ir_module->getContext()), a);
+    llvm::LoadInst *b_new_val = builder.CreateLoad(llvm::Type::getInt32Ty(ir_module->getContext()), b);
+    llvm::Value *result = builder.CreateNSWAdd(a_new_val, b_new_val);
+
+    builder.CreateRet(result);
 }
 
 void buildFunction(std::shared_ptr<llvm::Module> ir_module)

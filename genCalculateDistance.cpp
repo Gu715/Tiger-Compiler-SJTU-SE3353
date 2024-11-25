@@ -85,6 +85,129 @@ void buildCaculateDistance(std::shared_ptr<llvm::Module> ir_module)
     builder.SetInsertPoint(entry);
 
     // TODO
+
+    // basic block for loop and conditional branch
+    llvm::BasicBlock *test_block = llvm::BasicBlock::Create(ir_module->getContext(), "", caculateDistance);
+    llvm::BasicBlock *loop_block = llvm::BasicBlock::Create(ir_module->getContext(), "", caculateDistance);
+    llvm::BasicBlock *then_block = llvm::BasicBlock::Create(ir_module->getContext(), "", caculateDistance);
+    llvm::BasicBlock *else_block = llvm::BasicBlock::Create(ir_module->getContext(), "", caculateDistance);
+    llvm::BasicBlock *merge_block = llvm::BasicBlock::Create(ir_module->getContext(), "", caculateDistance);
+    llvm::BasicBlock *inc_block = llvm::BasicBlock::Create(ir_module->getContext(), "", caculateDistance);
+    llvm::BasicBlock *done_block = llvm::BasicBlock::Create(ir_module->getContext(), "", caculateDistance);
+
+    /**
+     * Init part:
+     * int k;
+     * long long kDist;
+     * k = 0;
+     * goto test_block;
+     */
+    llvm::AllocaInst *k = builder.CreateAlloca(llvm::Type::getInt32Ty(ir_module->getContext()), nullptr);
+    llvm::AllocaInst *kDist = builder.CreateAlloca(llvm::Type::getInt64Ty(ir_module->getContext()), nullptr);
+    builder.CreateStore(llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0), k);
+    builder.CreateBr(test_block);
+
+    /**
+     * Test part:
+     * int k_val_test = k;
+     * if (k_val_test < 3) goto loop_block;
+     * else goto done_block;
+     */
+    builder.SetInsertPoint(test_block);
+    llvm::LoadInst *k_val_test = builder.CreateLoad(llvm::Type::getInt32Ty(ir_module->getContext()), k);
+    llvm::Value *cond = builder.CreateICmpSLT(k_val_test, llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 3));
+    builder.CreateCondBr(cond, loop_block, done_block);
+
+    // get global variables and types
+    llvm::GlobalVariable *dist_array = global_values["dist"];
+    llvm::GlobalVariable *minDistance = global_values["minDistance"];
+    llvm::StructType *edge_s = struct_types["struct.Edge_s"];
+
+    /**
+     * Loop part:
+     * int k32_val = k;
+     * long long k64_val = (long long)k32_val;
+     * Edge **edge_ptr = &dist[k64_val];
+     * Edege *edge = *edge_ptr;
+     * long long *w_ptr = &edge->w;
+     * long long w_val = *w_ptr;
+     * kDist = w_val;
+     * long long kDist_val = kDist;
+     * long long minDistance_val = minDistance;
+     * if (kDist_val < minDistance_val) goto then_block;
+     * else goto else_block;
+     */
+    builder.SetInsertPoint(loop_block);
+    llvm::LoadInst *k32_val = builder.CreateLoad(llvm::Type::getInt32Ty(ir_module->getContext()), k);
+    llvm::Value *k64_val = builder.CreateSExt(k32_val, llvm::Type::getInt64Ty(ir_module->getContext()));
+    llvm::Value *edge_ptr = builder.CreateGEP(
+        dist_array->getType()->getPointerElementType(), 
+        dist_array, 
+        {llvm::ConstantInt::get(llvm::Type::getInt64Ty(ir_module->getContext()), 0), k64_val}
+    );
+    llvm::LoadInst *edge = builder.CreateLoad(llvm::PointerType::get(edge_s, 0), edge_ptr);
+    llvm::Value *w_ptr = builder.CreateGEP(
+        edge->getType()->getPointerElementType(),
+        edge,
+        {llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0), llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 2)}
+    );
+    llvm::LoadInst *w_val = builder.CreateLoad(llvm::Type::getInt64Ty(ir_module->getContext()), w_ptr);
+    builder.CreateStore(w_val, kDist);
+    llvm::LoadInst *kDist_val = builder.CreateLoad(llvm::Type::getInt64Ty(ir_module->getContext()), kDist);
+    llvm::LoadInst *minDistance_val = builder.CreateLoad(llvm::Type::getInt64Ty(ir_module->getContext()), minDistance);
+    llvm::Value *cond2 = builder.CreateICmpSLT(kDist_val, minDistance_val);
+    builder.CreateCondBr(cond2, then_block, else_block);
+
+    /**
+     * Then part:
+     * long long t1 = kDist;
+     * goto merge_block;
+     */
+    builder.SetInsertPoint(then_block);
+    llvm::LoadInst *t1 = builder.CreateLoad(llvm::Type::getInt64Ty(ir_module->getContext()), kDist);
+    builder.CreateBr(merge_block);
+
+    /**
+     * Else part:
+     * long long t2 = minDistance;
+     * goto merge_block;
+     */
+    builder.SetInsertPoint(else_block);
+    llvm::LoadInst *t2 = builder.CreateLoad(llvm::Type::getInt64Ty(ir_module->getContext()), minDistance);
+    builder.CreateBr(merge_block);
+
+    /**
+     * Merge part:
+     * (t1, t2) -> t
+     * minDistance = t;
+     * goto inc_block;
+     */
+    builder.SetInsertPoint(merge_block);
+    llvm::PHINode *t = builder.CreatePHI(llvm::Type::getInt64Ty(ir_module->getContext()), 2);
+    t->addIncoming(t1, then_block);
+    t->addIncoming(t2, else_block);
+    builder.CreateStore(t, minDistance);
+    builder.CreateBr(inc_block);
+
+    /**
+     * Increment part:
+     * int k_old_val = k;
+     * int k_new_val = k_old_val + 1;
+     * k = k_new_val;
+     * goto test_block;
+     */
+    builder.SetInsertPoint(inc_block);
+    llvm::LoadInst *k_old_val = builder.CreateLoad(llvm::Type::getInt32Ty(ir_module->getContext()), k);
+    llvm::Value *k_new_val = builder.CreateNSWAdd(k_old_val, llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 1));
+    builder.CreateStore(k_new_val, k);
+    builder.CreateBr(test_block);
+
+    /**
+     * Done part:
+     * return;
+     */
+    builder.SetInsertPoint(done_block);
+    builder.CreateRetVoid();
 }
 
 void buildMain(std::shared_ptr<llvm::Module> ir_module)
@@ -96,6 +219,93 @@ void buildMain(std::shared_ptr<llvm::Module> ir_module)
     builder.SetInsertPoint(entry);
     
     // TODO
+
+    // Edge edge;
+    llvm::StructType *edge_s = struct_types["struct.Edge_s"];
+    llvm::AllocaInst *edge = builder.CreateAlloca(edge_s, nullptr);
+    llvm::Value *w_ptr = builder.CreateGEP(
+        edge->getType()->getPointerElementType(),
+        edge,
+        {llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0), llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 2)}
+    );
+
+    // scanf("%lld", &edge.w);
+    llvm::Function *_scanf = functions["__isoc99_scanf"];
+    llvm::GlobalVariable *_scanf_str = global_values[".str"];
+    llvm::Value *_scanf_str_ptr = builder.CreateGEP(
+        _scanf_str->getType()->getPointerElementType(),
+        _scanf_str,
+        {llvm::ConstantInt::get(llvm::Type::getInt64Ty(ir_module->getContext()), 0),
+         llvm::ConstantInt::get(llvm::Type::getInt64Ty(ir_module->getContext()), 0)}
+    );
+    builder.CreateCall(_scanf, {_scanf_str_ptr, w_ptr});
+
+ 
+    // dist[NUM - 1] = &edge;
+    llvm::GlobalVariable *dist_array = global_values["dist"];
+    llvm::Value *edge_ptr = builder.CreateGEP(
+        dist_array->getType()->getPointerElementType(), 
+        dist_array, 
+        {llvm::ConstantInt::get(llvm::Type::getInt64Ty(ir_module->getContext()), 0),
+         llvm::ConstantInt::get(llvm::Type::getInt64Ty(ir_module->getContext()), 2)}
+    );
+    builder.CreateStore(edge, edge_ptr);
+
+    // allDist[0][0] = edge.w;
+    llvm::Value *w_ptr_2 = builder.CreateGEP(
+        edge->getType()->getPointerElementType(),
+        edge,
+        {llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0),
+         llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 2)}
+    );
+    llvm::LoadInst *w64_val = builder.CreateLoad(llvm::Type::getInt64Ty(ir_module->getContext()), w_ptr);
+    llvm::Value *w32_val = builder.CreateTrunc(w64_val, llvm::Type::getInt32Ty(ir_module->getContext()));
+    llvm::GlobalVariable *allDist = global_values["allDist"];
+    llvm::Value *allDist_ptr = builder.CreateGEP(
+        allDist->getType()->getPointerElementType(),
+        allDist,
+        {llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0),
+         llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0),
+         llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0),}
+    );
+    builder.CreateStore(w32_val, allDist_ptr);
+
+    // caculateDistance();
+    llvm::Function *caculateDistance = functions["caculateDistance"];
+    builder.CreateCall(caculateDistance);
+
+    // printf("%lld %lld %d\n", minDistance, edge.w + 5 + 10, allDist[0][0]);
+    llvm::GlobalVariable *minDistance = global_values["minDistance"];
+    llvm::LoadInst *minDistance_val = builder.CreateLoad(llvm::Type::getInt64Ty(ir_module->getContext()), minDistance);
+    llvm::Value *w_ptr_3 = builder.CreateGEP(
+        edge->getType()->getPointerElementType(),
+        edge,
+        {llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0),
+         llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 2)}
+    );
+    llvm::Value *w_val = builder.CreateLoad(llvm::Type::getInt64Ty(ir_module->getContext()), w_ptr_3);
+    llvm::Value *w_add_5 = builder.CreateNSWAdd(w_val, llvm::ConstantInt::get(llvm::Type::getInt64Ty(ir_module->getContext()), 5));
+    llvm::Value *w_add_15 = builder.CreateNSWAdd(w_add_5, llvm::ConstantInt::get(llvm::Type::getInt64Ty(ir_module->getContext()), 10));
+    llvm::Value *allDist_ptr_2 = builder.CreateGEP(
+        allDist->getType()->getPointerElementType(),
+        allDist,
+        {llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0),
+         llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0),
+         llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0),}
+    );
+    llvm::LoadInst *allDist_val = builder.CreateLoad(llvm::Type::getInt32Ty(ir_module->getContext()), allDist_ptr_2);
+    llvm::Function *_printf = functions["printf"];
+    llvm::GlobalVariable *_printf_str = global_values[".str1"];
+    llvm::Value *_printf_str_ptr = builder.CreateGEP(
+        _printf_str->getType()->getPointerElementType(),
+        _printf_str,
+        {llvm::ConstantInt::get(llvm::Type::getInt64Ty(ir_module->getContext()), 0),
+         llvm::ConstantInt::get(llvm::Type::getInt64Ty(ir_module->getContext()), 0)}
+    );
+    builder.CreateCall(_printf, {_printf_str_ptr, minDistance_val, w_add_15, allDist_val});
+
+    // return 0;
+    builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(ir_module->getContext()), 0));
 }
 
 void buildFunction(std::shared_ptr<llvm::Module> ir_module)
