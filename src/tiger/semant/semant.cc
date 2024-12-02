@@ -434,33 +434,26 @@ void TypeDec::SemAnalyze(env::VEnvPtr venv, env::TEnvPtr tenv, int labelcount,
   }
 
   for (absyn::NameAndTy *type_dec : type_dec_list) {
-    type::Ty *ty = type_dec->ty_->SemAnalyze(tenv, errormsg);
-    (static_cast<type::NameTy *>(tenv->Look(type_dec->name_)))->ty_ = ty;
+    type::NameTy *name_ty = static_cast<type::NameTy *>(tenv->Look(type_dec->name_));
+    name_ty->ty_ = type_dec->ty_->SemAnalyze(tenv, errormsg);
   }
 
   bool has_cycle = false;
   for (absyn::NameAndTy *type_dec : type_dec_list) {
-    type::Ty *ty = tenv->Look(type_dec->name_);
-
+    type::Ty* ty = tenv->Look(type_dec->name_);
     if (ty && typeid(*ty) == typeid(type::NameTy)) {
-      std::unordered_set<sym::Symbol *> syms;
-      syms.insert(type_dec->name_);
+      type::Ty* ty_ty = ((type::NameTy*) ty)->ty_;
 
-      while (ty && typeid(*ty) == typeid(type::NameTy)) {
-        type::NameTy *name_ty = static_cast<type::NameTy *>(ty);
-        sym::Symbol *sym = name_ty->sym_;
-
-        if (syms.find(sym) != syms.end()) {
-          errormsg->Error(this->pos_, "illegal type cycle");
+      while (ty_ty && typeid(*ty_ty) == typeid(type::NameTy)) {
+        type::NameTy* name_ty = (type::NameTy*) ty_ty;
+        if (name_ty->sym_->Name() == type_dec->name_->Name()) {
+          errormsg->Error(pos_, "illegal type cycle");
           has_cycle = true;
           break;
         }
-
-        syms.insert(sym);
-        ty = name_ty->ty_;
+        ty_ty = name_ty->ty_;
       }
     }
-
     if (has_cycle)
       break;
   }
