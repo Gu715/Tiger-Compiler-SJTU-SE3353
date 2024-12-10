@@ -10,6 +10,7 @@
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
 #include <string>
+#include <map>
 
 namespace type {
 
@@ -71,6 +72,8 @@ private:
 class RecordTy : public Ty {
 public:
   FieldList *fields_;
+  // MY_MODIFY: store the index of each field
+  std::map<std::string, int> field_index;
   llvm::Type *GetLLVMType() override;
   explicit RecordTy(FieldList *fields) : fields_(fields) { llvm_type_ = NULL; }
 

@@ -87,6 +87,18 @@ public:
       : offset(offset), parent_frame(parent) {}
 
   /* TODO: Put your lab5-part1 code here */
+  llvm::Value *ToLLVMVal(llvm::Value *frame_addr_ptr) const override {
+    llvm::Value *frame_size = ir_builder->CreateLoad(
+      llvm::Type::getInt64Ty(ir_module->getContext()),
+      parent_frame->framesize_global
+    );
+    llvm::Value *off = ir_builder->CreateAdd(
+      frame_size,
+      llvm::ConstantInt::get(llvm::Type::getInt64Ty(ir_module->getContext()), offset)
+    );
+    llvm::Value *varAddr = ir_builder->CreateAdd(frame_addr_ptr, off);
+    return varAddr;
+  }
 };
 
 class X64Frame : public Frame {
@@ -115,6 +127,24 @@ public:
 
 frame::Frame *NewFrame(temp::Label *name, std::list<bool> formals) {
   /* TODO: Put your lab5-part1 code here */
+  std::list<frame::Access *> *formal_accesses = new std::list<frame::Access *>;
+  frame::Frame *frame = new X64Frame(name, formal_accesses);
+
+  // update arguments' InFrameAccess
+  int offset = reg_manager->WordSize();
+  for (bool escape : formals) {
+    frame::InFrameAccess *access = new frame::InFrameAccess(offset, frame);
+    frame->formals_->push_back(access);
+    offset += reg_manager->WordSize();
+  }
+
+  // define frame size
+  std::string frame_size_name = name->Name() + "_framesize_global";
+  frame->framesize_global = (llvm::GlobalVariable *)ir_module->getOrInsertGlobal(
+    frame_size_name, llvm::Type::getInt64Ty(ir_module->getContext())
+  );
+
+  return frame;
 }
 
 /**

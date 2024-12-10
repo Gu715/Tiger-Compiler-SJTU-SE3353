@@ -3,6 +3,7 @@
 extern llvm::IRBuilder<> *ir_builder;
 extern llvm::Module *ir_module;
 
+
 namespace type {
 
 NilTy NilTy::nilty_;
@@ -90,8 +91,11 @@ llvm::Type *RecordTy::GetLLVMType() {
     llvm_type_ = llvm::PointerType::get(structType, 0);
 
     std::vector<llvm::Type *> llvm_fields;
+    // MY_MODIFY: store the index of each field
+    int idx = 0;
     for (auto field : fields_->GetList()) {
       llvm_fields.push_back(field->ty_->GetLLVMType());
+      this->field_index[field->name_->Name()] = idx++;
     }
 
     structType->setBody(llvm_fields);
