@@ -4,6 +4,7 @@
 #include "tiger/canon/canon.h"
 #include "tiger/codegen/assem.h"
 #include "tiger/frame/x64frame.h"
+#include <unordered_set>
 
 // Forward Declarations
 namespace frame {
@@ -45,6 +46,10 @@ public:
   // check if the value is %sp in llvm
   bool IsRsp(llvm::Value *val, std::string_view function_name) const {
     // TODO: your lab5 code here
+    std::string name = val->getName().str();
+    if (name == std::string(function_name) + "_sp") {
+      return true;
+    }
     return false;
   }
 
@@ -64,6 +69,8 @@ private:
   std::unordered_map<llvm::BasicBlock *, int> *bb_map_;
   // for phi node, use a temp to record which block it jumps from
   temp::Temp *phi_temp_;
+  // for phi node, use a set to record non-conflicting random numbers as labels
+  std::unordered_set<int> *phi_label_;
   std::unique_ptr<canon::Traces> traces_;
   std::unique_ptr<AssemInstr> assem_instr_;
 };

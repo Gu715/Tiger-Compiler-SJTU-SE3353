@@ -64,6 +64,7 @@ class ValAndTy {
 public:
   type::Ty *ty_;
   llvm::Value *val_;
+  llvm::BasicBlock *last_bb_;
 
   // MY_MODIFY: init with last_bb
   ValAndTy(llvm::Value *val, type::Ty *ty, llvm::BasicBlock *last_bb = nullptr) : 

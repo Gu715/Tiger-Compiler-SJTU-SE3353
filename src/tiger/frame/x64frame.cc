@@ -157,6 +157,28 @@ frame::Frame *NewFrame(temp::Label *name, std::list<bool> formals) {
 assem::InstrList *ProcEntryExit1(std::string_view function_name,
                                  assem::InstrList *body) {
   // TODO: your lab5 code here
+  auto callee_regs_list = reg_manager->CalleeSaves()->GetList();
+  std::vector<temp::Temp *> tmps;
+
+  // store callee-saved registers at first
+  for (auto it = callee_regs_list.begin(); it != callee_regs_list.end(); it++) {
+    auto tmp = temp::TempFactory::NewTemp();
+    tmps.push_back(tmp);
+    body->Insert(body->GetList().begin(), 
+      new assem::OperInstr("movq `s0,`d0", new temp::TempList(tmp), new temp::TempList(*it), nullptr));
+  }
+
+  // create exit label at last
+  body->Append(new assem::LabelInstr(std::string(function_name) + "_exit"));
+
+  // restore callee-saved registers
+  for (auto it = callee_regs_list.begin(); it != callee_regs_list.end(); it++) {
+    size_t idx = std::distance(callee_regs_list.begin(), it);
+    auto tmp = tmps[idx];
+    body->Append(
+      new assem::OperInstr("movq `s0,`d0", new temp::TempList(*it), new temp::TempList(tmp), nullptr));
+  }
+
   return body;
 }
 
@@ -184,6 +206,14 @@ assem::Proc *ProcEntryExit3(std::string_view function_name,
   std::string epilogue = "";
 
   // TODO: your lab5 code here
+  const std::string func_name = function_name.data();
+
+  prologue += func_name + ":\n";  // label definition of the function name
+  // adjust stack pointer in body
+
+  epilogue += "addq $" + func_name + "_framesize_local,%rsp\n";  // reset the stack pointer
+  epilogue += "retq\n";  // return instruction
+
   return new assem::Proc(prologue, body, epilogue);
 }
 
