@@ -87,6 +87,18 @@ public:
       : offset(offset), parent_frame(parent) {}
 
   /* TODO: Put your lab5-part1 code here */
+  llvm::Value *ToLLVMVal(llvm::Value *frame_addr_ptr) const override {
+    llvm::Value *frame_size = ir_builder->CreateLoad(
+      llvm::Type::getInt64Ty(ir_module->getContext()),
+      parent_frame->framesize_global
+    );
+    llvm::Value *off = ir_builder->CreateAdd(
+      frame_size,
+      llvm::ConstantInt::get(llvm::Type::getInt64Ty(ir_module->getContext()), offset)
+    );
+    llvm::Value *varAddr = ir_builder->CreateAdd(frame_addr_ptr, off);
+    return varAddr;
+  }
 };
 
 class X64Frame : public Frame {
@@ -115,6 +127,24 @@ public:
 
 frame::Frame *NewFrame(temp::Label *name, std::list<bool> formals) {
   /* TODO: Put your lab5-part1 code here */
+  std::list<frame::Access *> *formal_accesses = new std::list<frame::Access *>;
+  frame::Frame *frame = new X64Frame(name, formal_accesses);
+
+  // update arguments' InFrameAccess
+  int offset = reg_manager->WordSize();
+  for (bool escape : formals) {
+    frame::InFrameAccess *access = new frame::InFrameAccess(offset, frame);
+    frame->formals_->push_back(access);
+    offset += reg_manager->WordSize();
+  }
+
+  // define frame size
+  std::string frame_size_name = name->Name() + "_framesize_global";
+  frame->framesize_global = (llvm::GlobalVariable *)ir_module->getOrInsertGlobal(
+    frame_size_name, llvm::Type::getInt64Ty(ir_module->getContext())
+  );
+
+  return frame;
 }
 
 /**
@@ -127,6 +157,28 @@ frame::Frame *NewFrame(temp::Label *name, std::list<bool> formals) {
 assem::InstrList *ProcEntryExit1(std::string_view function_name,
                                  assem::InstrList *body) {
   // TODO: your lab5 code here
+  auto callee_regs_list = reg_manager->CalleeSaves()->GetList();
+  std::vector<temp::Temp *> tmps;
+
+  // store callee-saved registers at first
+  for (auto it = callee_regs_list.begin(); it != callee_regs_list.end(); it++) {
+    auto tmp = temp::TempFactory::NewTemp();
+    tmps.push_back(tmp);
+    body->Insert(body->GetList().begin(), 
+      new assem::OperInstr("movq `s0,`d0", new temp::TempList(tmp), new temp::TempList(*it), nullptr));
+  }
+
+  // create exit label at last
+  body->Append(new assem::LabelInstr(std::string(function_name) + "_exit"));
+
+  // restore callee-saved registers
+  for (auto it = callee_regs_list.begin(); it != callee_regs_list.end(); it++) {
+    size_t idx = std::distance(callee_regs_list.begin(), it);
+    auto tmp = tmps[idx];
+    body->Append(
+      new assem::OperInstr("movq `s0,`d0", new temp::TempList(*it), new temp::TempList(tmp), nullptr));
+  }
+
   return body;
 }
 
@@ -154,6 +206,14 @@ assem::Proc *ProcEntryExit3(std::string_view function_name,
   std::string epilogue = "";
 
   // TODO: your lab5 code here
+  const std::string func_name = function_name.data();
+
+  prologue += func_name + ":\n";  // label definition of the function name
+  // adjust stack pointer in body
+
+  epilogue += "addq $" + func_name + "_framesize_local,%rsp\n";  // reset the stack pointer
+  epilogue += "retq\n";  // return instruction
+
   return new assem::Proc(prologue, body, epilogue);
 }
 
