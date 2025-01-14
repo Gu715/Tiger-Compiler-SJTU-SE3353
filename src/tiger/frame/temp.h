@@ -64,17 +64,7 @@ public:
   explicit TempList(Temp *t) : temp_list_({t}) {}
   TempList(std::initializer_list<Temp *> list) : temp_list_(list) {}
   TempList() = default;
-  TempList *Temp2Temp(Temp *old_temp, Temp *new_temp) const {
-    auto *res = new TempList();
-    for (Temp *tmp : temp_list_) {
-      if (tmp == old_temp) {
-        res->temp_list_.push_back(new_temp);
-        continue ;
-      }
-      res->temp_list_.push_back(tmp);
-    }
-    return res;
-  }
+  
   bool Contain(Temp *a) const;
   bool Equal(TempList *tl) const;
   void Replace(Temp *old_temp, Temp *new_temp);
