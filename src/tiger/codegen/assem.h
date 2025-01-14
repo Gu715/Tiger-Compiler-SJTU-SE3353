@@ -23,6 +23,7 @@ public:
   virtual void Print(FILE *out, temp::Map *m) const = 0;
   [[nodiscard]] virtual temp::TempList *Def() const = 0;
   [[nodiscard]] virtual temp::TempList *Use() const = 0;
+  virtual void Temp2Temp(temp::Temp *old_temp, temp::Temp *new_temp) = 0;
 };
 
 class OperInstr : public Instr {
@@ -38,6 +39,10 @@ public:
   void Print(FILE *out, temp::Map *m) const override;
   [[nodiscard]] temp::TempList *Def() const override;
   [[nodiscard]] temp::TempList *Use() const override;
+  void Temp2Temp(temp::Temp *old_temp, temp::Temp *new_temp) override{
+      dst_ = dst_->Temp2Temp(old_temp, new_temp);
+      src_ = src_->Temp2Temp(old_temp, new_temp);
+  }
 };
 
 class LabelInstr : public Instr {
@@ -50,6 +55,7 @@ public:
   void Print(FILE *out, temp::Map *m) const override;
   [[nodiscard]] temp::TempList *Def() const override;
   [[nodiscard]] temp::TempList *Use() const override;
+  void Temp2Temp(temp::Temp *old_temp, temp::Temp *new_temp) override{}
 };
 
 class MoveInstr : public Instr {
@@ -63,6 +69,10 @@ public:
   void Print(FILE *out, temp::Map *m) const override;
   [[nodiscard]] temp::TempList *Def() const override;
   [[nodiscard]] temp::TempList *Use() const override;
+  void Temp2Temp(temp::Temp *old_temp, temp::Temp *new_temp) override{
+      dst_ = dst_->Temp2Temp(old_temp, new_temp);
+      src_ = src_->Temp2Temp(old_temp, new_temp);
+  }
 };
 
 class InstrList {

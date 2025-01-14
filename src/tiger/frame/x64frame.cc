@@ -209,7 +209,7 @@ assem::Proc *ProcEntryExit3(std::string_view function_name,
   const std::string func_name = function_name.data();
 
   prologue += func_name + ":\n";  // label definition of the function name
-  // adjust stack pointer in body
+  prologue += "subq $" + func_name + "_framesize_local,%rsp\n";  // adjust the stack pointer
 
   epilogue += "addq $" + func_name + "_framesize_local,%rsp\n";  // reset the stack pointer
   epilogue += "retq\n";  // return instruction
